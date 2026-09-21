@@ -27,7 +27,7 @@ func GetAssetsInfoInChunks(ctx *context.Context, r *request.Request) []chan Asse
 			}
 
 			return retry.Do(
-				retry.NewOptions(retry.Tries(3)),
+				retry.NewOptions(retry.Tries(6), retry.Delay(800*time.Millisecond)),
 				func(try int) (develop.GetAssetsInfoResponse, error) {
 					ctx.PauseController.WaitIfPaused()
 					if try > 1 {
@@ -59,7 +59,9 @@ func GetAssetsInfoInChunks(ctx *context.Context, r *request.Request) []chan Asse
 	chunkAmount := (len(ids) + AssetsInfoChunkSize - 1) / AssetsInfoChunkSize
 	tasks := make([]chan AssetsInfoResult, 0, chunkAmount)
 	for start, end := 0, 50; start < len(ids); start, end = start+50, end+50 {
-		end = min(end, len(ids))
+		if end > len(ids) {
+			end = len(ids)
+		}
 		idChunk := ids[start:end]
 		tasks = append(tasks, queue.QueueTask(newAssetsInfoHandler(idChunk)))
 	}

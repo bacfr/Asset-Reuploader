@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,23 +25,23 @@ import (
 )
 
 const assetTypeID int32 = 24
-const animationUploadRetryTries = 5
+const animationUploadRetryTries = 8
 // SmoothQueue: even start spacing + concurrency cap (respect Roblox limits, don’t exceed).
-const animationStartsPerMinute = 420
-const animationMaxConcurrentUploads = 24
+const animationStartsPerMinute = 500
+const animationMaxConcurrentUploads = 30
 
 // Pause every N successful uploads while holding a concurrency slot (API breather).
-const animationSuccessDrainEvery = 300
-const animationSuccessDrainPause = 1500 * time.Millisecond
+const animationSuccessDrainEvery = 400
+const animationSuccessDrainPause = 1200 * time.Millisecond
 
 // When Retry-After is missing on 429 (rare); server hint via ide.RateLimitError otherwise.
-const animationRateLimitMinBackoff = 800 * time.Millisecond
+const animationRateLimitMinBackoff = 600 * time.Millisecond
 // Extra wait + pacer chill after any 429 (Retry-After is often a floor; API still hot).
-const animationPost429ExtraWait = 1800 * time.Millisecond
-const animationPost429Chill = 1100 * time.Millisecond
+const animationPost429ExtraWait = 1500 * time.Millisecond
+const animationPost429Chill = 900 * time.Millisecond
 
 // Parallel 50-id GetAssetsInfo chunks (metadata only).
-const animationMaxParallelChunks = 6
+const animationMaxParallelChunks = 8
 
 var ErrUnauthorized = errors.New("authentication required to access asset")
 
@@ -309,7 +308,7 @@ func Reupload(ctx *context.Context, r *request.Request) {
 	getAssetLocations := func(body []*assetdelivery.AssetRequestItem, placeID int64) ([]*assetdelivery.AssetLocation, error) {
 		runGetLocations := func(handler func() ([]*assetdelivery.AssetLocation, error)) ([]*assetdelivery.AssetLocation, error) {
 			return retry.Do(
-			retry.NewOptions(retry.Tries(3)),
+			retry.NewOptions(retry.Tries(6), retry.Delay(800*time.Millisecond)),
 			func(try int) ([]*assetdelivery.AssetLocation, error) {
 				pauseController.WaitIfPaused()
 
@@ -409,14 +408,15 @@ func Reupload(ctx *context.Context, r *request.Request) {
 			}
 
 			var hadSuccess bool
-			for assetIndex, assetLocation := range slices.Backward(assetLocations) {
+			for assetIndex := len(assetLocations) - 1; assetIndex >= 0; assetIndex-- {
+				assetLocation := assetLocations[assetIndex]
 				if len(assetLocation.Locations) == 0 {
 					continue
 				}
 				hadSuccess = true
 
 				assetID := body[assetIndex].AssetID
-				body = slices.Delete(body, assetIndex, assetIndex+1)
+				body = append(body[:assetIndex], body[assetIndex+1:]...)
 
 				uploadWG.Add(1)
 				go uploadAsset(&uploadWG, assetInfoMap[assetID], assetLocation.Locations[0].Location)

@@ -1,6 +1,6 @@
 module github.com/kartFr/Asset-Reuploader
 
-go 1.23.3
+go 1.23
 
 require (
 	github.com/mattn/go-colorable v0.1.14

@@ -17,10 +17,13 @@ import (
 )
 
 const (
-	createAssetURL   = "https://apis.roblox.com/assets/v1/assets"
-	operationBaseURL = "https://apis.roblox.com/assets/v1/operations/"
-	maxPollAttempts  = 30
-	pollInterval     = time.Second
+	createAssetURL      = "https://apis.roblox.com/assets/v1/assets"
+	operationBaseURL    = "https://apis.roblox.com/assets/v1/operations/"
+	maxPollAttempts     = 60
+	pollInterval        = 800 * time.Millisecond
+	initialPollInterval = 500 * time.Millisecond
+	maxPollInterval     = 3 * time.Second
+	retryAfterHeader    = "Retry-After"
 )
 
 var errTokenInvalid = errors.New("XSRF token validation failed")
@@ -266,10 +269,14 @@ func pollOperation(c *roblox.Client, operationID string) (*operationResponse, er
 		}
 		return &operation, nil
 	case http.StatusTooManyRequests:
-		return nil, newRateLimitError(resp.Header.Get("Retry-After"))
+		return nil, newRateLimitError(resp.Header.Get(retryAfterHeader))
 	case http.StatusForbidden:
 		c.SetToken(resp.Header.Get("x-csrf-token"))
 		return nil, errTokenInvalid
+	case http.StatusNotFound:
+		return nil, errors.New("operation not found - asset may have been rejected during moderation")
+	case http.StatusInternalServerError:
+		return nil, errors.New("roblox server error - will retry")
 	default:
 		return nil, errors.New(decodeStatus(body, resp.Status))
 	}
@@ -318,8 +325,12 @@ func executeCreateAsset(
 		}
 
 		var poll429Streak int
+		var consecutiveServerErrors int
+		var currentPollInterval = initialPollInterval
+
 		for i := 0; i < maxPollAttempts; i++ {
-			time.Sleep(pollInterval)
+			time.Sleep(currentPollInterval)
+			
 			polled, err := pollOperation(c, operationID)
 			if err != nil {
 				if errors.Is(err, errTokenInvalid) {
@@ -335,10 +346,13 @@ func executeCreateAsset(
 					if errors.As(err, &rle) && rle.RetryAfter > 0 {
 						wait = rle.RetryAfter
 					}
-					// Retry-After is often short; add cushion and escalate if polls keep 429ing.
 					wait += 1200 * time.Millisecond
 					if poll429Streak >= 2 {
-						wait += time.Duration(min(poll429Streak, 8)) * 350 * time.Millisecond
+						cappedStreak := poll429Streak
+						if cappedStreak > 8 {
+							cappedStreak = 8
+						}
+						wait += time.Duration(cappedStreak) * 350 * time.Millisecond
 					}
 					if wait > 45*time.Second {
 						wait = 45 * time.Second
@@ -347,10 +361,28 @@ func executeCreateAsset(
 					i--
 					continue
 				}
+				if strings.Contains(err.Error(), "roblox server error") {
+					consecutiveServerErrors++
+					if consecutiveServerErrors > 8 {
+						return 0, err
+					}
+					currentPollInterval = maxPollInterval
+					i--
+					continue
+				}
+				if strings.Contains(err.Error(), "operation not found") {
+					return 0, err
+				}
 				return 0, err
 			}
+			
 			poll429Streak = 0
+			consecutiveServerErrors = 0
+			
 			if !polled.Done {
+				if currentPollInterval < maxPollInterval {
+					currentPollInterval += 200 * time.Millisecond
+				}
 				continue
 			}
 			if polled.Error != nil {

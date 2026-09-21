@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/kartFr/Asset-Reuploader/internal/roblox"
 )
@@ -91,68 +92,98 @@ func NewUploadAudioHandler(c *roblox.Client, name string, data *bytes.Buffer, gr
 		return func() (*publishAudioResponse, error) { return nil, nil }, err
 	}
 
+	var lastErr error
+	var retryCount int
+	const maxRetries = 3
+
 	return func() (*publishAudioResponse, error) {
-		req.AddCookie(&http.Cookie{
-			Name:  ".ROBLOSECURITY",
-			Value: c.Cookie,
-		})
-		req.Header.Set("x-csrf-token", c.GetToken())
+		for retryCount < maxRetries {
+			req.AddCookie(&http.Cookie{
+				Name:  ".ROBLOSECURITY",
+				Value: c.Cookie,
+			})
+			req.Header.Set("x-csrf-token", c.GetToken())
 
-		resp, err := c.DoRequest(req)
-		if err != nil {
-			return nil, err
+			resp, err := c.DoRequest(req)
+			if err != nil {
+				lastErr = err
+				retryCount++
+				if retryCount < maxRetries {
+					time.Sleep(time.Duration(retryCount) * time.Second)
+					continue
+				}
+				return nil, err
+			}
+			defer resp.Body.Close()
+
+			var response publishAudioResponse
+			json.NewDecoder(resp.Body).Decode(&response)
+
+			switch resp.StatusCode {
+			case http.StatusOK:
+				return &response, nil
+			case http.StatusBadRequest:
+				if response.Errors == nil {
+					return nil, errors.New(resp.Status)
+				}
+
+				message := response.Errors[0].Message
+				if message == "Audio name or description is moderated." {
+					req, _ = newUploadAudioRequest("[Censored]", data, groupID...)
+					return nil, UploadAudioErrors.ErrModerated
+				}
+
+				return nil, errors.New(message)
+			case http.StatusUnauthorized:
+				if response.Errors == nil {
+					return nil, errors.New(resp.Status)
+				}
+
+				message := response.Errors[0].Message
+				if message == "User is not authenticated" {
+					return nil, UploadAudioErrors.ErrNotAuthenticated
+				}
+
+				return nil, errors.New(message)
+			case http.StatusForbidden:
+				c.SetToken(resp.Header.Get("x-csrf-token"))
+				return nil, UploadAudioErrors.ErrTokenInvalid
+			case http.StatusTooManyRequests:
+				if response.Errors == nil {
+					return nil, errors.New(resp.Status)
+				}
+
+				message := response.Errors[0].Message
+				if message == "Audio upload has exceeded user's quota." {
+					return nil, UploadAudioErrors.ErrQuotaExceeded
+				}
+
+				retryCount++
+				if retryCount < maxRetries {
+					waitTime := time.Duration(retryCount*2) * time.Second
+					time.Sleep(waitTime)
+					continue
+				}
+				return nil, errors.New(message)
+			case http.StatusInternalServerError:
+			case http.StatusBadGateway:
+			case http.StatusServiceUnavailable:
+				retryCount++
+				if retryCount < maxRetries {
+					waitTime := time.Duration(retryCount*3) * time.Second
+					time.Sleep(waitTime)
+					continue
+				}
+				return nil, errors.New("roblox server temporarily unavailable")
+			default:
+				if response.Errors == nil {
+					return nil, errors.New(resp.Status)
+				}
+
+				return nil, errors.New(response.Errors[0].Message)
+			}
 		}
-		defer resp.Body.Close()
 
-		var response publishAudioResponse
-		json.NewDecoder(resp.Body).Decode(&response)
-
-		switch resp.StatusCode {
-		case http.StatusOK:
-			return &response, nil
-		case http.StatusBadRequest:
-			if response.Errors == nil {
-				return nil, errors.New(resp.Status)
-			}
-
-			message := response.Errors[0].Message
-			if message == "Audio name or description is moderated." {
-				req, _ = newUploadAudioRequest("[Censored]", data, groupID...)
-				return nil, UploadAudioErrors.ErrModerated
-			}
-
-			return nil, errors.New(message)
-		case http.StatusUnauthorized:
-			if response.Errors == nil {
-				return nil, errors.New(resp.Status)
-			}
-
-			message := response.Errors[0].Message
-			if message == "User is not authenticated" {
-				return nil, UploadAudioErrors.ErrNotAuthenticated
-			}
-
-			return nil, errors.New(message)
-		case http.StatusForbidden:
-			c.SetToken(resp.Header.Get("x-csrf-token"))
-			return nil, UploadAudioErrors.ErrTokenInvalid
-		case http.StatusTooManyRequests:
-			if response.Errors == nil {
-				return nil, errors.New(resp.Status)
-			}
-
-			message := response.Errors[0].Message
-			if message == "Audio upload has exceeded user's quota." {
-				return nil, UploadAudioErrors.ErrQuotaExceeded
-			}
-
-			return nil, errors.New(message)
-		default:
-			if response.Errors == nil {
-				return nil, errors.New(resp.Status)
-			}
-
-			return nil, errors.New(response.Errors[0].Message)
-		}
+		return nil, lastErr
 	}, nil
 }

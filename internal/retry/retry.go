@@ -1,13 +1,19 @@
 package retry
 
 import (
+	"math/rand"
 	"time"
 )
 
 func getDelay(o *retryOptions, tries int) time.Duration {
-	backoff := o.BackOff * time.Duration(tries)
-	delay := o.Delay * backoff
-
+	// Exponential backoff with jitter to prevent thundering herd
+	baseDelay := o.Delay * time.Duration(1<<(tries-1)) // 2^(tries-1) * Delay
+	
+	// Add jitter: ±25% randomization to prevent synchronized retries
+	jitterRange := baseDelay / 2
+	jitter := time.Duration(rand.Int63n(int64(jitterRange))) - time.Duration(baseDelay/4)
+	delay := baseDelay + jitter
+	
 	if o.MaxDelay == 0 {
 		return delay
 	}

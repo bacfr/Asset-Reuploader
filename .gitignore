@@ -1,3 +1,41 @@
-sourcemap.json
-api-key.txt
-cookie.txt
+```
+# Dependencies
+go.sum
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# Go build/cache
+*.test
+*.prof
+cover.out
+coverage.txt
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+*.tmp
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+```

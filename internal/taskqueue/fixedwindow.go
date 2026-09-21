@@ -32,7 +32,11 @@ func (w *fixedWindow) Increment() bool {
 
 	if w.timeRemaining(time.Now()) < 0 {
 		w.start = time.Now()
-		w.requests = max(w.requests-w.limit, 0)
+		if w.requests > w.limit {
+			w.requests = w.requests - w.limit
+		} else {
+			w.requests = 0
+		}
 	}
 
 	if w.requests < 0 {
