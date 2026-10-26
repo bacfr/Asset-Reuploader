@@ -9,11 +9,11 @@ if not RunService:IsEdit() then
 end
 
 local currentVersion = script.Parent.Version.Value
-local topbarTitle = "Bacfr Asset Reuploader 1.7.2"
+local topbarTitle = "Uploaderv3Newest"
 
-local toolbar = plugin:CreateToolbar("Asset Reuploader")
+local toolbar = plugin:CreateToolbar("Uploaderv3Newest")
 local widget = plugin:CreateDockWidgetPluginGui(
-	"Asset Reuploader",
+	"Uploaderv3Newest",
 	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, true, 500, 250, 500, 250)
 )
 
@@ -21,7 +21,7 @@ local toggleButton = toolbar:CreateButton("Toggle Gui", "Toggle gui visibility",
 toggleButton.Click:Connect(function() widget.Enabled = not widget.Enabled end)
 
 widget:GetPropertyChangedSignal("Enabled"):Connect(function() toggleButton:SetActive(widget.Enabled) end)
-widget.Title = `Bacfr 1.7.2`
+widget.Title = topbarTitle
 
 if plugin:GetSetting("Port") == nil then
 	plugin:SetSetting("Port", 38073)

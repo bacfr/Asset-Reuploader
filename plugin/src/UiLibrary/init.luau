@@ -6,7 +6,7 @@ local Theme = require("./UiLibrary/Theme")
 local Tip = require("./UiLibrary/Tip")
 
 local asset = script.Assets.MainFrame
-local TOPBAR_TITLE = "Bacfr Asset Reuploader 1.7.2"
+local TOPBAR_TITLE = "Uploaderv3Newest"
 
 type ThemeManager = typeof(Theme)
 
@@ -66,7 +66,7 @@ local function findTopbarTitleLabel(topBar: Frame): TextLabel?
 		if not instance:IsA("TextLabel") then
 			continue
 		end
-		if instance.Name == "Title" or string.find(string.lower(instance.Text), "asset reuploader", 1, true) then
+		if instance.Name == "Title" or instance.Text == TOPBAR_TITLE or string.find(string.lower(instance.Text), "asset reuploader", 1, true) then
 			return instance
 		end
 	end

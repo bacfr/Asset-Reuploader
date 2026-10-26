@@ -43,7 +43,23 @@ local HttpService = game:GetService("HttpService")
 
 local currentTheme: Theme
 local plugin: Plugin
-local themes: RawTheme = { Studio = { Name = "Studio" } }
+local DEFAULT_THEME_ID = "DarkPurple"
+local themes: RawTheme = {
+	Studio = { Name = "Studio" },
+	DarkPurple = {
+		Name = "Dark Purple",
+		BackgroundColor = { 20, 12, 32 },
+		ForegroundColor = { 33, 21, 52 },
+		BorderColor = { 74, 50, 110 },
+		UnselectedColor = { 47, 31, 73 },
+		SelectedColor = { 138, 80, 240 },
+		TextColor = { 238, 230, 252 },
+		DimmedTextColor = { 168, 150, 200 },
+		InputColor = { 238, 230, 252 },
+		TipColor = { 208, 192, 240 },
+		ToggleBackgroundColor = { 138, 80, 240 },
+	},
+}
 
 type RawTheme = { [string]: any }
 
@@ -182,7 +198,7 @@ local function save()
 	
 	local themesToSave = {}
 	for themeId, theme in themes do
-		if themeId == "Studio" then continue end
+		if themeId == "Studio" or themeId == DEFAULT_THEME_ID then continue end
 		themesToSave[themeId] = theme
 	end
 
@@ -204,7 +220,7 @@ function Theme.init(currentPlugin: Plugin)
 		return
 	end
 
-	Theme.set("Studio")
+	Theme.set(DEFAULT_THEME_ID)
 end
 
 function Theme.getThemes(): { [string]: RawTheme }

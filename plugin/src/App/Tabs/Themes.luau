@@ -83,6 +83,8 @@ return function(ui: UiLibrary.Ui, _plugin: Plugin)
 	end
 
 	tab:CreateLabel("Pre-made themes")
+	tab:CreateButton("Apply Dark Purple", function() applyThemeById("DarkPurple") end)
+	tab:CreateButton("Apply Studio", function() applyThemeById("Studio") end)
 	for _, rawTheme in PREMADE_THEMES do
 		local themeName = rawTheme.Name
 		tab:CreateButton(`Apply {themeName}`, function()
